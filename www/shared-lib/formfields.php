@@ -4,14 +4,19 @@ class formfields_class {
   
   function headSection() {
     return 
-      '<link rel="stylesheet" href="../shared-css/formfields.css" type="text/css"/>'.
-      '<!--script type="text/javascript">'.
+      '<script type="text/javascript">'.
       'browser.include_script_once(\'../shared-js/formfields.js\');'.
       'browser.include_style_once(\'../shared-css/formfields.css\')'.
-      '</script-->';
+      '</script>';
   }
   
   // parses (corrects) all values and returns array of error messages (which should be empty)
+  function validateInputs($values) {
+    $errs = $this->parseAndValidateInputs($values);
+    return array($values,$errs);
+  }
+
+  // deprecated version of validateInputs, the new version has more intuitive inputs/outputs
   function parseAndValidateInputs(&$values) {
     $errs = array();
     foreach($this->fields as $k=>$v) {
@@ -25,6 +30,7 @@ class formfields_class {
   function addField($name,$field) {
     $field->setName($name);
     $this->fields[$name] = $field;
+    return $field;
   }
   
   function fieldHtml($name,$value=NULL) {
@@ -34,8 +40,10 @@ class formfields_class {
   function formAsTableRows($lastValues) {
     $ans = '';
     foreach ($this->fields as $key=>$field) {
-      $inp = $field->fieldHtml_start().$field->fieldHtml(@$lastValues[$key]).$field->fieldHtml_end();
-      if (isset($inp)) {
+      $v = isset($lastValues[$key]) ? $lastValues[$key] : NULL;
+      $v = $field->fieldHtml($v);
+      if (isset($v)) {
+        $inp = $field->fieldHtml_open().$v.$field->fieldHtml_close();
         $class = '';
         $label = @$field->label;
         if (isset($label)) {
@@ -61,6 +69,7 @@ class anyField_class {
   public $label;
   public $readOnly;
   public $name;
+  public $fileExtension;
   public $errors = array();
   protected $attrs;
   protected $defaultValue;
@@ -71,6 +80,10 @@ class anyField_class {
     $this->readOnly = false;
   }
 
+  function htmlSafe($s) {
+    return htmlspecialchars($s,ENT_NOQUOTES,'UTF-8',FALSE);
+  }
+  
   // parses (corrects) value and returns error message or NULL
   function parseDefault(&$value) {
     if (!isset($value)) {
@@ -114,7 +127,7 @@ class anyField_class {
     return $this->isEmpty($formVal);
   }
 
-  function fieldHtml_start() {
+  function fieldHtml_open() {
     $ans = '';
     foreach ($this->errors as $err) {
       $ans .= '<div class="ff_error_box">';
@@ -123,7 +136,7 @@ class anyField_class {
     return $ans;
   }
   
-  function fieldHtml_end() {
+  function fieldHtml_close() {
     return ($this->errors ? '' : '</div>');
   }
 
@@ -131,7 +144,7 @@ class anyField_class {
     $ans = '';
     if (!isset($value)) $value = $this->defaultValue;
     if ($this->readOnly) {
-      $ans .= htmlspecialchars($value).'<input type="hidden" ';
+      $ans .= $this->htmlSafe($value).'<input type="hidden" ';
     } else {
       $ans .= '<input ';
       foreach($this->attrs as $k=>$v) {
@@ -139,7 +152,7 @@ class anyField_class {
       }
     }
     $ans .= 'name="'.$this->name.'" ';
-    if (isset($value)) $ans .= 'value="'.htmlspecialchars($value).'"';
+    if (isset($value)) $ans .= 'value="'.$this->htmlSafe($value).'"';
     $ans .= '/>';
     return $ans;
   }
@@ -206,7 +219,7 @@ class textField_class extends multiField_class {
 class pwdField_class extends textField_class {
   function __construct($label,$attrs=array(),$minLen=6,$maxLen=20) {
     parent::__construct($label,$attrs,$minLen,$maxLen);
-    $attrs['type'] = 'password';
+    $this->attrs['type'] = 'password';
   }
 }
 
@@ -263,7 +276,7 @@ class selectField_class extends anyField_class {
   
   function setDefault($value) {
     parent::setDefault($value);
-    $this->selected = array($value=>1);
+    $this->selected = array($value=>TRUE);
   }
   
   function getChoiceTitle($key) {
@@ -290,7 +303,7 @@ class selectField_class extends anyField_class {
       // now works only when default value is set
       $selected = $this->defaultValue;
       $value = $this->choices[$selected];
-      $ans = htmlspecialchars($value).'<input type="hidden" value="'.str_replace('"','\"',$selected).'" name="'.$this->name.'">';
+      $ans = $this->htmlSafe($value).'<input type="hidden" value="'.str_replace('"','\"',$selected).'" name="'.$this->name.'">';
       return $ans;
     }
     $ans = '<select ';
@@ -308,7 +321,7 @@ class selectField_class extends anyField_class {
         }
         $ans .= '<optgroup>';
       } else {
-        $ans .= '<option value="'.htmlspecialchars($k).'"'.(@$selected[$k] ? ' selected>' : '>').htmlspecialchars($v).'</option>';
+        $ans .= '<option value="'.$this->htmlSafe($k).'"'.(@$selected[$k] ? ' selected>' : '>').$this->htmlSafe($v).'</option>';
       }
     }
     $ans .= '</select>';
@@ -344,6 +357,40 @@ class commentField_class extends anyField_class {
 
   function parseAndValidate(&$value) {
     return;
+  }
+}
+
+class fileField_class extends anyField_class {
+  function __construct($label, $id_, $ext) {
+    $attrs = array('type'=>'file', 'id'=>$id_);
+    $this->fileExtension = $ext;
+    parent::__construct($label,$attrs);
+  }
+
+  function parseAndValidate(&$value) {
+    if(isset( $_FILES[(string)$this->name]["name"]))
+    {
+      $allowedExts = array((string)$this->fileExtension);
+      $temp = explode(".", $_FILES[(string)$this->name]["name"]);
+      $extension = end($temp);
+      if (in_array($extension, $allowedExts)) {
+        if(!file_exists("../upload"))
+          mkdir("../upload"); 
+        if ($_FILES[(string)$this->name]["error"] > 0) {
+          return "Error: " . $_FILES[(string)$this->name]["error"] . "<br>";
+        } else {    
+          move_uploaded_file($_FILES[(string)$this->name]["tmp_name"], "../upload/" . $_FILES[(string)$this->name]["name"]);
+          return;
+        }
+      } else {
+        return 'invalid '.$this->fileExtension.' file';
+      }
+    } 
+  }
+
+  function getFileName()
+  {
+    return $_FILES[(string)$this->name]["name"];
   }
 }
 ?>

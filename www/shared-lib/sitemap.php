@@ -36,6 +36,15 @@ class siteMap_class {
     ';
   }
 
+  function currentUser() {
+    return @$_SESSION['verified_user'];
+  }
+  
+  function userInfo($tagName='div') {
+    $user = $this->currentUser();
+    return $user ? '<'.$tagName.'>You are logged in as user <tt>'.$user.'</tt></'.$tagName.'>' : '';
+  }
+  
   function pageTitle($tagName='h1') {
     return '<'.$tagName.'>'.$this->info['title'].'</'.$tagName.'>';
   }
@@ -169,13 +178,17 @@ class siteMap_class {
     return '<'.$tagName.'>'.$this->tree2html($subTree).'</'.$tagName.'>';
   }
   
-  function basicLoginForm($action,$redirect) {
+  function basicLoginForm($action,$redirect,$fixedUser=FALSE) {
     $a  = '<html><head>';
     $a .=	'</head><body>';
 	  $a .= '<form name="login" method="POST" action="'.$action.'">';
 	  $a .= '<h1>Login page</h1>';
 	  $a .= '<table><tr>';
-	  $a .= '<td>User name</td><td>:</td><td><input name="user" type="text"/></td>';
+    if ($fixedUser) {
+	    $a .= '<td>User name</td><td>:</td><td><input name="user" type="hidden" value="'.$fixedUser.'"/>'.$fixedUser.'</td>';
+    } else {
+	    $a .= '<td>User name</td><td>:</td><td><input name="user" type="text"/></td>';
+    }    
 	  $a .= '</tr><tr>';
 	  $a .= '<td>Password</td><td>:</td><td><input name="pwd" type="password"/></td>';
 	  $a .= '</tr></table>';
